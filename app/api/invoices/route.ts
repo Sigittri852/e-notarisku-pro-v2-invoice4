@@ -1,32 +1,26 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { listInvoices, saveInvoices } from "@/lib/invoice-store";
-import type { Invoice, InvoiceItem } from "@/lib/invoice";
+import { DEFAULT_NOTARIS, nextInvoiceNumber, type Invoice, type InvoiceItem } from "@/lib/invoice";
+import { nonNegative, str } from "@/lib/coerce";
 
-const str = (v: unknown) => String(v ?? "");
-const num = (v: unknown) => Number(v || 0);
 const cleanItems = (v: unknown): InvoiceItem[] => Array.isArray(v)
-  ? v.map((x: any) => ({ description: str(x?.description).trim(), qty: Math.max(0, num(x?.qty)), price: Math.max(0, num(x?.price)) })).filter(x => x.description)
+  ? v.map((x: any) => ({ description: str(x?.description).trim(), qty: nonNegative(x?.qty), price: nonNegative(x?.price) })).filter(x => x.description)
   : [];
 
 async function nextNumber() {
-  const year = new Date().getFullYear();
-  const month = String(new Date().getMonth() + 1).padStart(2, "0");
-  const all = await listInvoices();
-  const prefix = `INV-${year}${month}-`;
-  const seq = all.map(x => x.nomor).filter(x => x.startsWith(prefix)).map(x => Number(x.slice(prefix.length))).filter(Number.isFinite);
-  return `${prefix}${String((seq.length ? Math.max(...seq) : 0) + 1).padStart(4, "0")}`;
+  return nextInvoiceNumber((await listInvoices()).map(x => x.nomor));
 }
 
 function normalize(body: any, id?: string): Invoice {
   return {
     id: id || randomUUID(), nomor: str(body.nomor), tanggal: str(body.tanggal), jatuhTempo: str(body.jatuhTempo),
     aktaId: str(body.aktaId) || undefined, nomorAkta: str(body.nomorAkta), jenisAkta: str(body.jenisAkta), kategori: str(body.kategori),
-    namaNotaris: str(body.namaNotaris) || "APRIANI, S.H., M.Kn.",
+    namaNotaris: str(body.namaNotaris) || DEFAULT_NOTARIS,
     pelanggan: str(body.pelanggan), alamat: str(body.alamat), nik: str(body.nik), items: cleanItems(body.items),
-    nilaiTransaksi: Math.max(0, num(body.nilaiTransaksi)), njop: Math.max(0, num(body.njop)),
-    sspPph: Math.max(0, num(body.sspPph)), sspdBphtb: Math.max(0, num(body.sspdBphtb)),
-    diskon: Math.max(0, num(body.diskon)), ppnPersen: Math.max(0, num(body.ppnPersen)), ppn: Math.max(0, num(body.ppn)),
+    nilaiTransaksi: nonNegative(body.nilaiTransaksi), njop: nonNegative(body.njop),
+    sspPph: nonNegative(body.sspPph), sspdBphtb: nonNegative(body.sspdBphtb),
+    diskon: nonNegative(body.diskon), ppnPersen: nonNegative(body.ppnPersen), ppn: nonNegative(body.ppn),
     status: body.status === "Lunas" || body.status === "Sebagian" ? body.status : "Belum Lunas",
     catatan: str(body.catatan), metodePembayaran: str(body.metodePembayaran), createdAt: body.createdAt || new Date().toISOString()
   };

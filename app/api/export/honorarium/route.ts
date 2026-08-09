@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { listAkta } from "@/lib/store";
+import { pihakNama } from "@/lib/akta";
+import { RUPIAH_NUM_FMT, isoDate } from "@/lib/format";
+import { XLSX_CONTENT_TYPE, attachmentResponse } from "@/lib/http";
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,6 @@ export async function GET() {
 
   let totalHonor = 0;
   data.forEach((x, i) => {
-    const pihak = x.pihak?.length ? x.pihak : [{ nama: x.namaPihak, nik: x.nik, npwp: x.npwp }];
     totalHonor += Number(x.honorarium) || 0;
     ws.addRow({
       no: i + 1,
@@ -39,7 +40,7 @@ export async function GET() {
       tanggal: x.tanggal,
       jenisAkta: x.jenisAkta,
       kategori: x.kategori,
-      pihak: pihak.map((p) => p.nama).filter(Boolean).join(", "),
+      pihak: pihakNama(x),
       nilaiTransaksi: Number(x.nilaiTransaksi) || 0,
       njop: Number(x.njop) || 0,
       sspPph: Number(x.sspPph) || 0,
@@ -50,7 +51,7 @@ export async function GET() {
   });
 
   ["H", "I", "J", "K", "L"].forEach((col) => {
-    ws.getColumn(col).numFmt = '"Rp" #,##0';
+    ws.getColumn(col).numFmt = RUPIAH_NUM_FMT;
   });
 
   const totalRowIndex = data.length + 2;
@@ -58,13 +59,8 @@ export async function GET() {
   ws.getCell(`F${totalRowIndex}`).font = { bold: true };
   ws.getCell(`L${totalRowIndex}`).value = totalHonor;
   ws.getCell(`L${totalRowIndex}`).font = { bold: true };
-  ws.getCell(`L${totalRowIndex}`).numFmt = '"Rp" #,##0';
+  ws.getCell(`L${totalRowIndex}`).numFmt = RUPIAH_NUM_FMT;
 
   const buf = await wb.xlsx.writeBuffer();
-  return new NextResponse(buf as BodyInit, {
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="Rekap-Honorarium-${new Date().toISOString().slice(0, 10)}.xlsx"`,
-    },
-  });
+  return attachmentResponse(buf as BodyInit, XLSX_CONTENT_TYPE, `Rekap-Honorarium-${isoDate()}.xlsx`);
 }

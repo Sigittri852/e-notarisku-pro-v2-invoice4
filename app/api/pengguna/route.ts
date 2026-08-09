@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import {
-  createUser,
-  listUsers,
-  toPublicUser,
-  type UserRole,
-} from "@/lib/user-store";
-
-const roles: UserRole[] = ["SUPER_ADMIN", "NOTARIS_PPAT", "STAFF"];
+import { createUser, listUsers, toPublicUser } from "@/lib/user-store";
+import { parseUserInput } from "@/lib/user-validation";
+import { errorMessage } from "@/lib/http";
 
 export async function GET() {
   const users = await listUsers();
@@ -15,37 +10,16 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const nama = String(body.nama ?? "").trim();
-    const email = String(body.email ?? "").trim();
-    const password = String(body.password ?? "");
-    const role = String(body.role ?? "STAFF") as UserRole;
-    const aktif = body.aktif !== false;
-
-    if (!nama || !email || !password) {
-      return NextResponse.json(
-        { message: "Nama, email, dan password wajib diisi." },
-        { status: 400 },
-      );
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return NextResponse.json({ message: "Format email tidak valid." }, { status: 400 });
-    }
-    if (password.length < 6) {
-      return NextResponse.json(
-        { message: "Password minimal 6 karakter." },
-        { status: 400 },
-      );
-    }
-    if (!roles.includes(role)) {
-      return NextResponse.json({ message: "Peran tidak valid." }, { status: 400 });
+    const parsed = parseUserInput(await request.json(), { requirePassword: true });
+    if ("error" in parsed) {
+      return NextResponse.json({ message: parsed.error }, { status: 400 });
     }
 
-    const user = await createUser({ nama, email, password, role, aktif });
+    const user = await createUser(parsed.data);
     return NextResponse.json(toPublicUser(user), { status: 201 });
   } catch (error) {
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Gagal menambah pengguna." },
+      { message: errorMessage(error, "Gagal menambah pengguna.") },
       { status: 400 },
     );
   }

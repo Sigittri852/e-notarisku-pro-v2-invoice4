@@ -2,6 +2,9 @@
 import {useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {AKTA_NOTARIS,AKTA_PPAT,DYNAMIC_FIELDS} from "@/lib/constants";
+import {pihakList} from "@/lib/akta";
+import {uploadFiles} from "@/lib/client-api";
+import {isoDate} from "@/lib/format";
 import type {Akta,Dokumen,Kategori,PihakAkta,TandaTanganDigital} from "@/lib/types";
 import SignaturePad from "./SignaturePad";
 import CurrencyInput from "./CurrencyInput";
@@ -16,7 +19,7 @@ export default function AktaForm({initial}:{initial?:Akta}){
  const[jenisAkta,setJenisAkta]=useState(initial?.jenisAkta||jenisList[0]);
  const[dokumen,setDokumen]=useState<Dokumen[]>(initial?.dokumen||[]);
  const[pihak,setPihak]=useState<PihakAkta[]>(()=>{
-   const lama=initial?.pihak?.length?initial.pihak:[{nama:initial?.namaPihak||"",nik:initial?.nik||"",npwp:initial?.npwp||""}];
+   const lama=pihakList(initial);
    return Array.from({length:6},(_,i)=>({scanIdentitas:[],...(lama[i]||{nama:"",nik:"",npwp:""})}));
  });
  const[fotoTtdKlien,setFotoTtdKlien]=useState<Dokumen[]>(initial?.fotoTtdKlien||[]);
@@ -33,9 +36,10 @@ export default function AktaForm({initial}:{initial?:Akta}){
  const showLand=kategori==="PPAT"||landTypes.includes(jenisAkta);
  const changeKategori=(k:Kategori)=>{setKategori(k);setJenisAkta((k==="NOTARIS"?AKTA_NOTARIS:AKTA_PPAT)[0]);};
  const updatePihak=(i:number,key:keyof PihakAkta,value:string)=>setPihak(v=>v.map((x,n)=>n===i?{...x,[key]:value}:x));
- async function uploadTo(files:FileList|null,setter:(fn:(v:Dokumen[])=>Dokumen[])=>void){if(!files||!files.length)return;setBusy(true);const fd=new FormData();Array.from(files).forEach(f=>fd.append("files",f));const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();setter(v=>[...v,...(j.files||[])]);setBusy(false)}
+ async function unggah(files:FileList|null,terima:(dokumen:Dokumen[])=>void){if(!files||!files.length)return;setBusy(true);try{terima(await uploadFiles(files))}catch(e:any){alert(e.message||'Gagal mengupload file.')}finally{setBusy(false)}}
+ async function uploadTo(files:FileList|null,setter:(fn:(v:Dokumen[])=>Dokumen[])=>void){await unggah(files,d=>setter(v=>[...v,...d]))}
  async function upload(files:FileList|null){await uploadTo(files,setDokumen)}
- async function uploadIdentitas(i:number,files:FileList|null){if(!files||!files.length)return;setBusy(true);const fd=new FormData();Array.from(files).forEach(f=>fd.append("files",f));const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();setPihak(v=>v.map((x,n)=>n===i?{...x,scanIdentitas:[...(x.scanIdentitas||[]),...(j.files||[])]}:x));setBusy(false)}
+ async function uploadIdentitas(i:number,files:FileList|null){await unggah(files,d=>setPihak(v=>v.map((x,n)=>n===i?{...x,scanIdentitas:[...(x.scanIdentitas||[]),...d]}:x)))}
  const removeIdentitas=(i:number,idx:number)=>setPihak(v=>v.map((x,n)=>n===i?{...x,scanIdentitas:(x.scanIdentitas||[]).filter((_,k)=>k!==idx)}:x));
  const addTandaTangan=(dataUrl:string,nama:string,peran:string)=>setTandaTanganDigital(v=>[...v,{nama,peran,dataUrl,tanggal:new Date().toISOString()}]);
  const removeTandaTangan=(idx:number)=>setTandaTanganDigital(v=>v.filter((_,k)=>k!==idx));
@@ -44,7 +48,7 @@ export default function AktaForm({initial}:{initial?:Akta}){
   <div className="category-tabs"><button type="button" className={kategori==='NOTARIS'?'tab active':'tab'} onClick={()=>changeKategori('NOTARIS')}>⚖ Akta Notaris</button><button type="button" className={kategori==='PPAT'?'tab active':'tab'} onClick={()=>changeKategori('PPAT')}>🏛 Akta PPAT</button></div>
   <div className="grid form-grid">
    <div className="field"><label>Nomor Akta</label><input name="nomorAkta" required defaultValue={initial?.nomorAkta}/></div>
-   <div className="field"><label>Tanggal Akta</label><input type="date" name="tanggal" required defaultValue={initial?.tanggal||new Date().toISOString().slice(0,10)}/></div>
+   <div className="field"><label>Tanggal Akta</label><input type="date" name="tanggal" required defaultValue={initial?.tanggal||isoDate()}/></div>
    <div className="field"><label>Jenis Akta {kategori}</label><select name="jenisAkta" value={jenisAkta} onChange={e=>setJenisAkta(e.target.value)}>{jenisList.map(x=><option key={x}>{x}</option>)}</select></div>
    <div className="field"><label>Nama Notaris / PPAT</label><input name="namaNotaris" required placeholder="Nama lengkap dan gelar" defaultValue={initial?.namaNotaris}/></div>
 
