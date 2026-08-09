@@ -9,5 +9,7 @@ public/uploads/*
 
 *.tsbuildinfo
 
+coverage/
+
 prisma/*.db
 prisma/*.db-*
