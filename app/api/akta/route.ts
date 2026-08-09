@@ -1,4 +1,4 @@
-import {NextResponse} from 'next/server';import {randomUUID} from 'crypto';import {listAkta,saveAkta} from '@/lib/store';import {AppError} from '@/lib/errors';import {errorResponse,readJsonBody} from '@/lib/api-error';import type {Akta,PihakAkta,TandaTanganDigital} from '@/lib/types';
+import {NextResponse} from 'next/server';import {randomUUID} from 'crypto';import {listAkta,createAkta,updateAkta,deleteAkta} from '@/lib/store';import {AppError} from '@/lib/errors';import {errorResponse,readJsonBody} from '@/lib/api-error';import type {Akta,PihakAkta,TandaTanganDigital} from '@/lib/types';
 const num=(v:unknown)=>Number(v||0);const str=(v:unknown)=>String(v||'');
 const cleanDokumen=(v:unknown):{name:string;url:string;type:string;size:number}[]=>Array.isArray(v)?v.filter((x:any)=>x&&x.url):[];
 const cleanPihak=(v:unknown):PihakAkta[]=>Array.isArray(v)?v.slice(0,6).map((x:any)=>({nama:str(x?.nama).trim(),nik:str(x?.nik).replace(/\D/g,'').slice(0,16),npwp:str(x?.npwp).trim(),scanIdentitas:cleanDokumen(x?.scanIdentitas)})).filter(x=>x.nama||x.nik||x.npwp||(x.scanIdentitas&&x.scanIdentitas.length)):[];
@@ -16,11 +16,9 @@ export async function GET(){
 export async function POST(req:Request){
  try{
   const body=await readJsonBody(req);
-  const data=await listAkta();
   const a=normalize(body);
   if(!a.pihak.length||!a.pihak[0].nama)throw new AppError('Minimal nama pihak pertama wajib diisi',400);
-  data.unshift(a);
-  await saveAkta(data);
+  await createAkta(a);
   return NextResponse.json({id:a.id},{status:201});
  }catch(error){
   return errorResponse('AKTA POST ERROR',error,'Gagal menyimpan akta.');
@@ -32,13 +30,9 @@ export async function PUT(req:Request){
   const id=new URL(req.url).searchParams.get('id');
   if(!id)throw new AppError('ID wajib',400);
   const body=await readJsonBody(req);
-  const data=await listAkta();
-  const i=data.findIndex(x=>x.id===id);
-  if(i<0)throw new AppError('Data tidak ditemukan',404);
   const a=normalize(body,id);
   if(!a.pihak.length||!a.pihak[0].nama)throw new AppError('Minimal nama pihak pertama wajib diisi',400);
-  data[i]=a;
-  await saveAkta(data);
+  await updateAkta(id,a);
   return NextResponse.json({id});
  }catch(error){
   return errorResponse('AKTA PUT ERROR',error,'Gagal memperbarui akta.');
@@ -49,9 +43,7 @@ export async function DELETE(req:Request){
  try{
   const id=new URL(req.url).searchParams.get('id');
   if(!id)throw new AppError('ID wajib',400);
-  const data=await listAkta();
-  if(!data.some(x=>x.id===id))throw new AppError('Data tidak ditemukan',404);
-  await saveAkta(data.filter(x=>x.id!==id));
+  await deleteAkta(id);
   return NextResponse.json({ok:true});
  }catch(error){
   return errorResponse('AKTA DELETE ERROR',error,'Gagal menghapus akta.');
