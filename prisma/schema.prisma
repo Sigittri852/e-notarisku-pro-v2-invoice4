@@ -47,6 +47,17 @@ model Akta {
   @@index([createdAt])
 }
 
+model User {
+  id           String   @id @default(cuid())
+  nama         String
+  email        String   @unique
+  role         String   @default("STAFF")
+  aktif        Boolean  @default(true)
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model Invoice {
   id             String   @id @default(cuid())
   nomor          String   @unique
