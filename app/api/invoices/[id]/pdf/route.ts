@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
 import { getInvoice } from "@/lib/invoice-store";
-import { invoiceSubtotal, invoicePpn, invoiceTotal } from "@/lib/invoice";
+import {
+  DEFAULT_NOTARIS,
+  hasDataPajak,
+  invoicePpn,
+  invoiceSubtotal,
+  invoiceTaxLines,
+  invoiceTotal,
+} from "@/lib/invoice";
 import { rupiah } from "@/lib/constants";
+import { downloadSlug } from "@/lib/format";
+import { PDF_CONTENT_TYPE, attachmentResponse } from "@/lib/http";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -85,8 +94,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   doc.text(x.kategori || "NOTARIS / PPAT", marginX + colWidth, y);
 
   // Blok referensi Nilai Transaksi / NJOP / SSP PPh / SSPD BPHTB (khusus Notaris/PPAT)
-  const adaDataPajak = (x.nilaiTransaksi || 0) > 0 || (x.njop || 0) > 0 || (x.sspPph || 0) > 0 || (x.sspdBphtb || 0) > 0;
-  if (adaDataPajak) {
+  if (hasDataPajak(x)) {
     y += 24;
     doc.setFillColor(247, 250, 255);
     doc.rect(marginX, y, pageWidth - marginX * 2, 46, "F");
@@ -146,10 +154,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     y += rowH;
   });
   let nomorBaris = x.items.length;
-  const pajakRows: Array<{ label: string; value: number }> = [];
-  if ((x.sspPph || 0) > 0) pajakRows.push({ label: "Pajak SSP (PPh)", value: x.sspPph || 0 });
-  if ((x.sspdBphtb || 0) > 0) pajakRows.push({ label: "Pajak SSB (BPHTB)", value: x.sspdBphtb || 0 });
-  pajakRows.forEach((row) => {
+  invoiceTaxLines(x).forEach((row) => {
     nomorBaris += 1;
     const rowH = 24;
     doc.text(String(nomorBaris), colX.no + 6, y + 16);
@@ -216,19 +221,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   doc.text("Hormat kami,", pageWidth - marginX, footerY - 40, { align: "right" });
   doc.setFont("helvetica", "bold");
   doc.setTextColor(20, 42, 69);
-  doc.text(x.namaNotaris || "APRIANI, S.H., M.Kn.", pageWidth - marginX, footerY + 10, { align: "right" });
+  doc.text(x.namaNotaris || DEFAULT_NOTARIS, pageWidth - marginX, footerY + 10, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 119, 142);
   doc.text("Notaris / PPAT", pageWidth - marginX, footerY + 22, { align: "right" });
 
   const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
-  const filename = `Invoice_${(x.nomor || "invoice").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
 
-  return new NextResponse(pdfBuffer, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  });
+  return attachmentResponse(
+    pdfBuffer,
+    PDF_CONTENT_TYPE,
+    `Invoice_${downloadSlug(x.nomor, "invoice")}.pdf`,
+  );
 }

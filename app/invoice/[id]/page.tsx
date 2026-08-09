@@ -1,6 +1,13 @@
 import AppShell from "@/components/AppShell";
 import { getInvoice } from "@/lib/invoice-store";
-import { invoiceSubtotal, invoicePpn, invoiceTotal } from "@/lib/invoice";
+import {
+  DEFAULT_NOTARIS,
+  hasDataPajak,
+  invoicePpn,
+  invoiceSubtotal,
+  invoiceTaxLines,
+  invoiceTotal,
+} from "@/lib/invoice";
 import { rupiah } from "@/lib/constants";
 import PrintButton from "@/components/PrintButton";
 import InvoiceDeleteButton from "@/components/InvoiceDeleteButton";
@@ -17,7 +24,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const subtotal = invoiceSubtotal(x);
   const ppnNominal = invoicePpn(x);
   const total = invoiceTotal(x);
-  const adaDataPajak = (x.nilaiTransaksi || 0) > 0 || (x.njop || 0) > 0 || (x.sspPph || 0) > 0 || (x.sspdBphtb || 0) > 0;
+  const pajakLines = invoiceTaxLines(x);
 
   return (
     <AppShell>
@@ -61,7 +68,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
 
-        {adaDataPajak && (
+        {hasDataPajak(x) && (
           <div className="invoice-meta invoice-pajak-block">
             <div>
               <small>NILAI TRANSAKSI (REFERENSI)</small>
@@ -88,12 +95,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             {x.items.map((it, i) => (
               <tr key={i}><td>{i + 1}</td><td>{it.description}</td><td>{it.qty}</td><td>{rupiah(it.price)}</td><td>{rupiah(it.qty * it.price)}</td></tr>
             ))}
-            {(x.sspPph || 0) > 0 && (
-              <tr><td>{x.items.length + 1}</td><td>Pajak SSP (PPh)</td><td>1</td><td>{rupiah(x.sspPph || 0)}</td><td>{rupiah(x.sspPph || 0)}</td></tr>
-            )}
-            {(x.sspdBphtb || 0) > 0 && (
-              <tr><td>{x.items.length + ((x.sspPph||0)>0?2:1)}</td><td>Pajak SSB (BPHTB)</td><td>1</td><td>{rupiah(x.sspdBphtb || 0)}</td><td>{rupiah(x.sspdBphtb || 0)}</td></tr>
-            )}
+            {pajakLines.map((line, i) => (
+              <tr key={line.label}><td>{x.items.length + i + 1}</td><td>{line.label}</td><td>1</td><td>{rupiah(line.value)}</td><td>{rupiah(line.value)}</td></tr>
+            ))}
           </tbody>
         </table>
 
@@ -117,7 +121,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <div>Terima kasih atas kepercayaan Anda.</div>
           <div className="invoice-sign">
             <p>Hormat kami,</p>
-            <strong>{x.namaNotaris || "APRIANI, S.H., M.Kn."}</strong>
+            <strong>{x.namaNotaris || DEFAULT_NOTARIS}</strong>
             <span>Notaris / PPAT</span>
           </div>
         </footer>

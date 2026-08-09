@@ -1,49 +1,25 @@
 import { NextResponse } from "next/server";
-import { toPublicUser, updateUser, type UserRole } from "@/lib/user-store";
-
-const roles: UserRole[] = ["SUPER_ADMIN", "NOTARIS_PPAT", "STAFF"];
+import { toPublicUser, updateUser } from "@/lib/user-store";
+import { parseUserInput } from "@/lib/user-validation";
+import { errorMessage } from "@/lib/http";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function PUT(request: Request, context: Context) {
   try {
     const { id } = await context.params;
-    const body = await request.json();
-    const nama = String(body.nama ?? "").trim();
-    const email = String(body.email ?? "").trim();
-    const password = String(body.password ?? "");
-    const role = String(body.role ?? "STAFF") as UserRole;
-    const aktif = body.aktif !== false;
-
-    if (!nama || !email) {
-      return NextResponse.json(
-        { message: "Nama dan email wajib diisi." },
-        { status: 400 },
-      );
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return NextResponse.json({ message: "Format email tidak valid." }, { status: 400 });
-    }
-    if (password && password.length < 6) {
-      return NextResponse.json(
-        { message: "Password baru minimal 6 karakter." },
-        { status: 400 },
-      );
-    }
-    if (!roles.includes(role)) {
-      return NextResponse.json({ message: "Peran tidak valid." }, { status: 400 });
+    const parsed = parseUserInput(await request.json(), { requirePassword: false });
+    if ("error" in parsed) {
+      return NextResponse.json({ message: parsed.error }, { status: 400 });
     }
 
     const user = await updateUser(id, {
-      nama,
-      email,
-      role,
-      aktif,
-      password: password || undefined,
+      ...parsed.data,
+      password: parsed.data.password || undefined,
     });
     return NextResponse.json(toPublicUser(user));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Gagal mengubah pengguna.";
+    const message = errorMessage(error, "Gagal mengubah pengguna.");
     return NextResponse.json(
       { message },
       { status: message.includes("tidak ditemukan") ? 404 : 400 },

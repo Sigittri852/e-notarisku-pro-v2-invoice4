@@ -2,22 +2,22 @@
 import { useMemo, useState } from "react";
 import type { Akta } from "@/lib/types";
 import type { InvoiceItem } from "@/lib/invoice";
-import { invoiceSubtotal, invoicePpn, invoiceTotal } from "@/lib/invoice";
+import { DEFAULT_NOTARIS, invoiceSubtotal, invoicePpn, invoiceTaxLines, invoiceTotal } from "@/lib/invoice";
 import { rupiah } from "@/lib/constants";
+import { isoDate, isoDateIn } from "@/lib/format";
+import { pihakNama, pihakNik } from "@/lib/akta";
+import { readJson } from "@/lib/client-api";
 import CurrencyInput from "@/components/CurrencyInput";
 import InvoiceDeleteButton from "@/components/InvoiceDeleteButton";
 
-const DEFAULT_NOTARIS = "APRIANI, S.H., M.Kn.";
-
 export default function InvoiceForm({ akta, invoice }: { akta?: Akta; invoice?: any }) {
   const [nomor, setNomor] = useState(invoice?.nomor || "");
-  const [tanggal, setTanggal] = useState(invoice?.tanggal || new Date().toISOString().slice(0,10));
-  const [jatuhTempo, setJatuhTempo] = useState(invoice?.jatuhTempo || new Date(Date.now()+7*86400000).toISOString().slice(0,10));
+  const [tanggal, setTanggal] = useState(invoice?.tanggal || isoDate());
+  const [jatuhTempo, setJatuhTempo] = useState(invoice?.jatuhTempo || isoDateIn(7));
   const [namaNotaris, setNamaNotaris] = useState(invoice?.namaNotaris || akta?.namaNotaris || DEFAULT_NOTARIS);
-  const pihak = akta?.pihak?.length ? akta.pihak : [{nama: akta?.namaPihak || "", nik: akta?.nik || "", npwp: akta?.npwp || ""}];
-  const [pelanggan, setPelanggan] = useState(invoice?.pelanggan || pihak.map((x:any)=>x.nama).filter(Boolean).join(", "));
+  const [pelanggan, setPelanggan] = useState(invoice?.pelanggan || pihakNama(akta));
   const [alamat, setAlamat] = useState(invoice?.alamat || akta?.alamat || "");
-  const [nik, setNik] = useState(invoice?.nik || pihak.map((x:any)=>x.nik).filter(Boolean).join(", "));
+  const [nik, setNik] = useState(invoice?.nik || pihakNik(akta));
   const [items, setItems] = useState<InvoiceItem[]>(invoice?.items?.length ? invoice.items : [{description: akta ? `Honorarium ${akta.jenisAkta} No. ${akta.nomorAkta}` : "Jasa Notaris / PPAT", qty: 1, price: akta?.honorarium || 0}]);
 
   // Data objek & pajak akta (khusus Notaris/PPAT)
@@ -42,7 +42,7 @@ export default function InvoiceForm({ akta, invoice }: { akta?: Akta; invoice?: 
   const ppnNominal = useMemo(()=>invoicePpn({items, sspPph, sspdBphtb, ppnPersen, ppn: ppnLegacy}),[items, sspPph, sspdBphtb, ppnPersen, ppnLegacy]);
   const total = useMemo(()=>invoiceTotal({items, sspPph, sspdBphtb, diskon, ppn: ppnLegacy, ppnPersen}),[items, sspPph, sspdBphtb, diskon, ppnPersen, ppnLegacy]);
 
-  async function ensureNumber(){ if(nomor) return nomor; const r=await fetch('/api/invoices/next-number',{cache:'no-store'}); const text=await r.text(); let j:any; try{j=JSON.parse(text)}catch{throw new Error('API nomor invoice mengembalikan respons tidak valid: '+text.slice(0,200))} if(!r.ok || !j.nomor) throw new Error(j.error || 'Gagal mengambil nomor invoice'); setNomor(j.nomor); return j.nomor; }
+  async function ensureNumber(){ if(nomor) return nomor; const r=await fetch('/api/invoices/next-number',{cache:'no-store'}); const j=await readJson(r,'API nomor invoice'); if(!r.ok || !j.nomor) throw new Error(j.error || 'Gagal mengambil nomor invoice'); setNomor(j.nomor); return j.nomor; }
   function updateItem(i:number, key:keyof InvoiceItem, value:string){setItems(v=>v.map((x,idx)=>idx===i?{...x,[key]:key==='description'?value:Number(value)}:x));}
   async function save(){
     setSaving(true);setError("");
@@ -56,7 +56,7 @@ export default function InvoiceForm({ akta, invoice }: { akta?: Akta; invoice?: 
         status,metodePembayaran,catatan
       };
       const r=await fetch('/api/invoices'+(invoice?.id?`?id=${invoice.id}`:''),{method:invoice?.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const text=await r.text(); let j:any; try{j=JSON.parse(text)}catch{throw new Error('API invoice mengembalikan respons tidak valid: '+text.slice(0,300))} if(!r.ok) throw new Error(j.error||'Gagal menyimpan invoice');
+      const j=await readJson(r,'API invoice'); if(!r.ok) throw new Error(j.error||'Gagal menyimpan invoice');
       window.location.href=`/invoice/${j.id}`;
     }catch(e:any){setError(e.message||'Gagal menyimpan invoice');setSaving(false)}
   }
@@ -86,8 +86,7 @@ export default function InvoiceForm({ akta, invoice }: { akta?: Akta; invoice?: 
 
     <div className="invoice-items"><div className="invoice-section-title"><h3>Rincian Tagihan</h3><button type="button" className="btn btn-small" onClick={()=>setItems(v=>[...v,{description:"Jasa / biaya tambahan",qty:1,price:0}])}>+ Tambah Baris</button></div>
       <div className="table-wrap"><table className="table invoice-input-table"><thead><tr><th>Uraian</th><th style={{width:90}}>Qty</th><th style={{width:200}}>Harga (Rp)</th><th style={{width:200}}>Jumlah</th><th></th></tr></thead><tbody>{items.map((it,i)=><tr key={i}><td><input value={it.description} onChange={e=>updateItem(i,'description',e.target.value)}/></td><td><input type="number" min="0" value={it.qty} onChange={e=>updateItem(i,'qty',e.target.value)}/></td><td><CurrencyInput value={it.price} onValueChange={(n)=>setItems(v=>v.map((x,idx)=>idx===i?{...x,price:n}:x))}/></td><td><b>{rupiah((it.qty||0)*(it.price||0))}</b></td><td>{items.length>1&&<button type="button" className="link-danger" onClick={()=>setItems(v=>v.filter((_,idx)=>idx!==i))}>Hapus</button>}</td></tr>)}
-        {(sspPph>0)&&<tr className="muted"><td>Pajak SSP (PPh) — otomatis</td><td>1</td><td>{rupiah(sspPph)}</td><td><b>{rupiah(sspPph)}</b></td><td></td></tr>}
-        {(sspdBphtb>0)&&<tr className="muted"><td>Pajak SSB (BPHTB) — otomatis</td><td>1</td><td>{rupiah(sspdBphtb)}</td><td><b>{rupiah(sspdBphtb)}</b></td><td></td></tr>}
+        {invoiceTaxLines({sspPph, sspdBphtb}).map(line=><tr className="muted" key={line.label}><td>{line.label} — otomatis</td><td>1</td><td>{rupiah(line.value)}</td><td><b>{rupiah(line.value)}</b></td><td></td></tr>)}
       </tbody></table></div>
     </div>
 

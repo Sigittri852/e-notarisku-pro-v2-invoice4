@@ -1,42 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
+import { errorMessage } from "@/lib/http";
+import {
+  MAX_UPLOAD_FILES,
+  formFiles,
+  safeUploadName,
+  uploadFileError,
+} from "@/lib/upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024;
-
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-  "application/pdf",
-  "application/zip",
-  "application/x-zip-compressed",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]);
-
-function safeFileName(name: string) {
-  return name
-    .normalize("NFKD")
-    .replace(/[^\w.\- ]/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 120);
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const form = await req.formData();
-
-    const files = form
-      .getAll("files")
-      .filter((value): value is File => value instanceof File);
+    const files = formFiles(await req.formData());
 
     if (!files.length) {
       return NextResponse.json(
@@ -45,9 +23,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (files.length > 10) {
+    if (files.length > MAX_UPLOAD_FILES) {
       return NextResponse.json(
-        { error: "Maksimal 10 file sekali upload." },
+        { error: `Maksimal ${MAX_UPLOAD_FILES} file sekali upload.` },
         { status: 400 }
       );
     }
@@ -64,25 +42,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      if (file.size > MAX_FILE_SIZE) {
-        return NextResponse.json(
-          {
-            error: `File "${file.name}" terlalu besar. Maksimal 25 MB.`,
-          },
-          { status: 400 }
-        );
+      const invalid = uploadFileError(file);
+      if (invalid) {
+        return NextResponse.json({ error: invalid }, { status: 400 });
       }
 
-      if (!ALLOWED_TYPES.has(file.type)) {
-        return NextResponse.json(
-          {
-            error: `Jenis file "${file.name}" tidak diperbolehkan.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      const filename = `${randomUUID()}-${safeFileName(file.name)}`;
+      const filename = `${randomUUID()}-${safeUploadName(file.name)}`;
 
       const blob = await put(`notaris/${filename}`, file, {
         access: "public",
@@ -107,10 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Gagal mengupload file.",
+        error: errorMessage(error, "Gagal mengupload file."),
       },
       { status: 500 }
     );
