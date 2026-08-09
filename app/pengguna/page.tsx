@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import { fetchJson } from "@/lib/fetch-json";
+import { errorMessage } from "@/lib/errors";
 
 type UserRole = "SUPER_ADMIN" | "NOTARIS_PPAT" | "STAFF";
 type UserItem = {
@@ -46,11 +48,9 @@ export default function Page() {
   async function loadUsers() {
     setLoading(true);
     try {
-      const response = await fetch("/api/pengguna", { cache: "no-store" });
-      if (!response.ok) throw new Error("Gagal mengambil data pengguna.");
-      setUsers(await response.json());
+      setUsers(await fetchJson<UserItem[]>("/api/pengguna", { cache: "no-store" }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mengambil data pengguna.");
+      setError(errorMessage(err, "Gagal mengambil data pengguna."));
     } finally {
       setLoading(false);
     }
@@ -86,17 +86,15 @@ export default function Page() {
     setError("");
     try {
       const url = editingId ? `/api/pengguna/${editingId}` : "/api/pengguna";
-      const response = await fetch(url, {
+      await fetchJson(url, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.message || "Data gagal disimpan.");
       setModalOpen(false);
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Data gagal disimpan.");
+      setError(errorMessage(err, "Data gagal disimpan."));
     } finally {
       setSaving(false);
     }

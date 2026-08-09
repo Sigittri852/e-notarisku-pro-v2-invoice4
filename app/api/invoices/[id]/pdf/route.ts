@@ -3,9 +3,18 @@ import { jsPDF } from "jspdf";
 import { getInvoice } from "@/lib/invoice-store";
 import { invoiceSubtotal, invoicePpn, invoiceTotal } from "@/lib/invoice";
 import { rupiah } from "@/lib/constants";
+import { errorResponse } from "@/lib/api-error";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  try {
+    const { id } = await params;
+    return await buildPdf(id);
+  } catch (error) {
+    return errorResponse("INVOICE PDF ERROR", error, "Gagal membuat PDF invoice.");
+  }
+}
+
+async function buildPdf(id: string) {
   const x = await getInvoice(id);
   if (!x) return new NextResponse("Invoice tidak ditemukan", { status: 404 });
 

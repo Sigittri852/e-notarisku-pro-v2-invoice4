@@ -5,6 +5,8 @@ import {AKTA_NOTARIS,AKTA_PPAT,DYNAMIC_FIELDS} from "@/lib/constants";
 import type {Akta,Dokumen,Kategori,PihakAkta,TandaTanganDigital} from "@/lib/types";
 import SignaturePad from "./SignaturePad";
 import CurrencyInput from "./CurrencyInput";
+import {fetchJson} from "@/lib/fetch-json";
+import {errorMessage} from "@/lib/errors";
 
 const landTypes=["Akta Pengikatan Jual Beli","Akta Kuasa Menjual","Akta Hibah","Akta Jual Beli","Akta Pembagian Hak Bersama","SKMHT","APHT","Akta Inbreng","Akta Tukar-Menukar"];
 const emptyPihak=():PihakAkta[]=>Array.from({length:6},()=>({nama:"",nik:"",npwp:"",scanIdentitas:[]}));
@@ -24,6 +26,7 @@ export default function AktaForm({initial}:{initial?:Akta}){
  const[minuta,setMinuta]=useState<Dokumen[]>(initial?.minuta||[]);
  const[tandaTanganDigital,setTandaTanganDigital]=useState<TandaTanganDigital[]>(initial?.tandaTanganDigital||[]);
  const[busy,setBusy]=useState(false);
+ const[error,setError]=useState("");
  const[nilaiTransaksi,setNilaiTransaksi]=useState<number>(initial?.nilaiTransaksi||0);
  const[njop,setNjop]=useState<number>(initial?.njop||0);
  const[sspPph,setSspPph]=useState<number>(initial?.sspPph||0);
@@ -33,14 +36,33 @@ export default function AktaForm({initial}:{initial?:Akta}){
  const showLand=kategori==="PPAT"||landTypes.includes(jenisAkta);
  const changeKategori=(k:Kategori)=>{setKategori(k);setJenisAkta((k==="NOTARIS"?AKTA_NOTARIS:AKTA_PPAT)[0]);};
  const updatePihak=(i:number,key:keyof PihakAkta,value:string)=>setPihak(v=>v.map((x,n)=>n===i?{...x,[key]:value}:x));
- async function uploadTo(files:FileList|null,setter:(fn:(v:Dokumen[])=>Dokumen[])=>void){if(!files||!files.length)return;setBusy(true);const fd=new FormData();Array.from(files).forEach(f=>fd.append("files",f));const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();setter(v=>[...v,...(j.files||[])]);setBusy(false)}
+ async function uploadFiles(files:FileList){const fd=new FormData();Array.from(files).forEach(f=>fd.append("files",f));const j=await fetchJson<{files?:Dokumen[]}>('/api/upload',{method:'POST',body:fd});const hasil=j?.files||[];if(!hasil.length)throw new Error('Server tidak mengembalikan berkas hasil upload.');return hasil}
+ async function uploadTo(files:FileList|null,setter:(fn:(v:Dokumen[])=>Dokumen[])=>void){if(!files||!files.length)return;setBusy(true);setError("");try{const hasil=await uploadFiles(files);setter(v=>[...v,...hasil])}catch(e){setError(errorMessage(e,'Gagal mengupload dokumen.'))}finally{setBusy(false)}}
  async function upload(files:FileList|null){await uploadTo(files,setDokumen)}
- async function uploadIdentitas(i:number,files:FileList|null){if(!files||!files.length)return;setBusy(true);const fd=new FormData();Array.from(files).forEach(f=>fd.append("files",f));const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();setPihak(v=>v.map((x,n)=>n===i?{...x,scanIdentitas:[...(x.scanIdentitas||[]),...(j.files||[])]}:x));setBusy(false)}
+ async function uploadIdentitas(i:number,files:FileList|null){if(!files||!files.length)return;setBusy(true);setError("");try{const hasil=await uploadFiles(files);setPihak(v=>v.map((x,n)=>n===i?{...x,scanIdentitas:[...(x.scanIdentitas||[]),...hasil]}:x))}catch(e){setError(errorMessage(e,'Gagal mengupload scan identitas.'))}finally{setBusy(false)}}
  const removeIdentitas=(i:number,idx:number)=>setPihak(v=>v.map((x,n)=>n===i?{...x,scanIdentitas:(x.scanIdentitas||[]).filter((_,k)=>k!==idx)}:x));
  const addTandaTangan=(dataUrl:string,nama:string,peran:string)=>setTandaTanganDigital(v=>[...v,{nama,peran,dataUrl,tanggal:new Date().toISOString()}]);
  const removeTandaTangan=(idx:number)=>setTandaTanganDigital(v=>v.filter((_,k)=>k!==idx));
- async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);const raw=Object.fromEntries(fd.entries());const detail=Object.fromEntries(dynamic.map(label=>[label,String(raw[`detail_${label}`]||"")]));const pihakTerisi=pihak.filter(x=>x.nama.trim()||x.nik.trim()||x.npwp.trim()||(x.scanIdentitas&&x.scanIdentitas.length));if(!pihakTerisi.length){setBusy(false);return alert('Minimal satu nama pihak harus diisi.')}const body={...raw,kategori,jenisAkta,pihak:pihakTerisi,detail,dokumen,fotoTtdKlien,fotoTtdNotaris,minuta,tandaTanganDigital,nilaiTransaksi,njop,sspPph,bphtb,honorarium};const r=await fetch(initial?`/api/akta?id=${initial.id}`:'/api/akta',{method:initial?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();setBusy(false);if(!r.ok)return alert(j.error||'Gagal menyimpan');router.push(`/akta/${j.id||initial?.id}`);router.refresh()}
+ async function submit(e:React.FormEvent<HTMLFormElement>){
+  e.preventDefault();
+  const fd=new FormData(e.currentTarget);
+  const raw=Object.fromEntries(fd.entries());
+  const detail=Object.fromEntries(dynamic.map(label=>[label,String(raw[`detail_${label}`]||"")]));
+  const pihakTerisi=pihak.filter(x=>x.nama.trim()||x.nik.trim()||x.npwp.trim()||(x.scanIdentitas&&x.scanIdentitas.length));
+  if(!pihakTerisi.length){setError('Minimal satu nama pihak harus diisi.');return}
+  setBusy(true);setError("");
+  const body={...raw,kategori,jenisAkta,pihak:pihakTerisi,detail,dokumen,fotoTtdKlien,fotoTtdNotaris,minuta,tandaTanganDigital,nilaiTransaksi,njop,sspPph,bphtb,honorarium};
+  try{
+   const j=await fetchJson<{id?:string}>(initial?`/api/akta?id=${initial.id}`:'/api/akta',{method:initial?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   router.push(`/akta/${j?.id||initial?.id}`);
+   router.refresh();
+  }catch(err){
+   setError(errorMessage(err,'Gagal menyimpan akta.'));
+   setBusy(false);
+  }
+ }
  return <form className="card form-card" onSubmit={submit}>
+  {error&&<div className="form-error">{error}</div>}
   <div className="category-tabs"><button type="button" className={kategori==='NOTARIS'?'tab active':'tab'} onClick={()=>changeKategori('NOTARIS')}>⚖ Akta Notaris</button><button type="button" className={kategori==='PPAT'?'tab active':'tab'} onClick={()=>changeKategori('PPAT')}>🏛 Akta PPAT</button></div>
   <div className="grid form-grid">
    <div className="field"><label>Nomor Akta</label><input name="nomorAkta" required defaultValue={initial?.nomorAkta}/></div>

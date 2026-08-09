@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { listInvoices, saveInvoices } from "@/lib/invoice-store";
+import { AppError } from "@/lib/errors";
+import { errorResponse, readJsonBody } from "@/lib/api-error";
 import type { Invoice, InvoiceItem } from "@/lib/invoice";
 
 const str = (v: unknown) => String(v ?? "");
@@ -32,35 +34,56 @@ function normalize(body: any, id?: string): Invoice {
   };
 }
 
-export async function GET() { return NextResponse.json(await listInvoices()); }
+export async function GET() {
+  try {
+    return NextResponse.json(await listInvoices());
+  } catch (error) {
+    return errorResponse("INVOICE GET ERROR", error, "Gagal memuat data invoice.");
+  }
+}
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const data = await listInvoices();
-  const a = normalize(body);
-  if (!a.nomor) a.nomor = await nextNumber();
-  if (!a.tanggal || !a.pelanggan || !a.items.length) return NextResponse.json({ error: "Tanggal, pelanggan, dan minimal satu item tagihan wajib diisi." }, { status: 400 });
-  data.unshift(a);
-  await saveInvoices(data);
-  return NextResponse.json({ id: a.id, nomor: a.nomor }, { status: 201 });
+  try {
+    const body = await readJsonBody(req);
+    const data = await listInvoices();
+    const a = normalize(body);
+    if (!a.tanggal || !a.pelanggan || !a.items.length) throw new AppError("Tanggal, pelanggan, dan minimal satu item tagihan wajib diisi.", 400);
+    if (!a.nomor) a.nomor = await nextNumber();
+    data.unshift(a);
+    await saveInvoices(data);
+    return NextResponse.json({ id: a.id, nomor: a.nomor }, { status: 201 });
+  } catch (error) {
+    return errorResponse("INVOICE POST ERROR", error, "Gagal menyimpan invoice.");
+  }
 }
 
 export async function PUT(req: Request) {
-  const id = new URL(req.url).searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "ID wajib" }, { status: 400 });
-  const data = await listInvoices();
-  const i = data.findIndex(x => x.id === id);
-  if (i < 0) return NextResponse.json({ error: "Invoice tidak ditemukan" }, { status: 404 });
-  const a = normalize(await req.json(), id);
-  if (!a.nomor) a.nomor = data[i].nomor;
-  data[i] = a;
-  await saveInvoices(data);
-  return NextResponse.json({ id: a.id, nomor: a.nomor });
+  try {
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) throw new AppError("ID wajib", 400);
+    const body = await readJsonBody(req);
+    const data = await listInvoices();
+    const i = data.findIndex(x => x.id === id);
+    if (i < 0) throw new AppError("Invoice tidak ditemukan", 404);
+    const a = normalize(body, id);
+    if (!a.nomor) a.nomor = data[i].nomor;
+    data[i] = a;
+    await saveInvoices(data);
+    return NextResponse.json({ id: a.id, nomor: a.nomor });
+  } catch (error) {
+    return errorResponse("INVOICE PUT ERROR", error, "Gagal memperbarui invoice.");
+  }
 }
 
 export async function DELETE(req: Request) {
-  const id = new URL(req.url).searchParams.get("id");
-  const data = await listInvoices();
-  await saveInvoices(data.filter(x => x.id !== id));
-  return NextResponse.json({ ok: true });
+  try {
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) throw new AppError("ID wajib", 400);
+    const data = await listInvoices();
+    if (!data.some(x => x.id === id)) throw new AppError("Invoice tidak ditemukan", 404);
+    await saveInvoices(data.filter(x => x.id !== id));
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return errorResponse("INVOICE DELETE ERROR", error, "Gagal menghapus invoice.");
+  }
 }

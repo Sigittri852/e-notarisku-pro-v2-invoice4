@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
+import { errorResponse } from "@/lib/api-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,17 +103,6 @@ export async function POST(req: NextRequest) {
       files: result,
     });
   } catch (error) {
-    console.error("UPLOAD ERROR:", error);
-
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Gagal mengupload file.",
-      },
-      { status: 500 }
-    );
+    return errorResponse("UPLOAD ERROR", error, "Gagal mengupload file.");
   }
 }
