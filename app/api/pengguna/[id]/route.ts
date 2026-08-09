@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
 import { toPublicUser, updateUser, type UserRole } from "@/lib/user-store";
 
 const roles: UserRole[] = ["SUPER_ADMIN", "NOTARIS_PPAT", "STAFF"];
@@ -6,6 +7,9 @@ const roles: UserRole[] = ["SUPER_ADMIN", "NOTARIS_PPAT", "STAFF"];
 type Context = { params: Promise<{ id: string }> };
 
 export async function PUT(request: Request, context: Context) {
+  const { session, response } = await requireRole("SUPER_ADMIN");
+  if (!session) return response;
+
   try {
     const { id } = await context.params;
     const body = await request.json();
@@ -24,9 +28,9 @@ export async function PUT(request: Request, context: Context) {
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       return NextResponse.json({ message: "Format email tidak valid." }, { status: 400 });
     }
-    if (password && password.length < 6) {
+    if (password && password.length < 8) {
       return NextResponse.json(
-        { message: "Password baru minimal 6 karakter." },
+        { message: "Password baru minimal 8 karakter." },
         { status: 400 },
       );
     }
