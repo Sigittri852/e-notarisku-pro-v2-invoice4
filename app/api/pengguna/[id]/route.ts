@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { toPublicUser, updateUser, type UserRole } from "@/lib/user-store";
+import { AppError } from "@/lib/errors";
+import { errorResponse, readJsonBody } from "@/lib/api-error";
 
 const roles: UserRole[] = ["SUPER_ADMIN", "NOTARIS_PPAT", "STAFF"];
 
@@ -8,7 +10,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function PUT(request: Request, context: Context) {
   try {
     const { id } = await context.params;
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const nama = String(body.nama ?? "").trim();
     const email = String(body.email ?? "").trim();
     const password = String(body.password ?? "");
@@ -16,22 +18,16 @@ export async function PUT(request: Request, context: Context) {
     const aktif = body.aktif !== false;
 
     if (!nama || !email) {
-      return NextResponse.json(
-        { message: "Nama dan email wajib diisi." },
-        { status: 400 },
-      );
+      throw new AppError("Nama dan email wajib diisi.", 400);
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return NextResponse.json({ message: "Format email tidak valid." }, { status: 400 });
+      throw new AppError("Format email tidak valid.", 400);
     }
     if (password && password.length < 6) {
-      return NextResponse.json(
-        { message: "Password baru minimal 6 karakter." },
-        { status: 400 },
-      );
+      throw new AppError("Password baru minimal 6 karakter.", 400);
     }
     if (!roles.includes(role)) {
-      return NextResponse.json({ message: "Peran tidak valid." }, { status: 400 });
+      throw new AppError("Peran tidak valid.", 400);
     }
 
     const user = await updateUser(id, {
@@ -43,10 +39,6 @@ export async function PUT(request: Request, context: Context) {
     });
     return NextResponse.json(toPublicUser(user));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Gagal mengubah pengguna.";
-    return NextResponse.json(
-      { message },
-      { status: message.includes("tidak ditemukan") ? 404 : 400 },
-    );
+    return errorResponse("PENGGUNA PUT ERROR", error, "Gagal mengubah pengguna.", "message");
   }
 }

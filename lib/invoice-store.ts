@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import type { Invoice, InvoiceItem } from "./invoice";
+import { AppError } from "./errors";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -17,9 +18,15 @@ function fromDb(row: any): Invoice {
   let items: InvoiceItem[] = [];
 
   try {
-    items = JSON.parse(row.items || "[]");
-  } catch {
-    items = [];
+    const parsed = JSON.parse(row.items || "[]");
+    if (!Array.isArray(parsed)) throw new Error("items bukan array");
+    items = parsed;
+  } catch (error) {
+    console.error(`INVOICE ITEMS PARSE ERROR (id=${row.id}):`, error);
+    throw new AppError(
+      `Rincian item invoice ${row.nomor || row.id} rusak dan tidak dapat dibaca.`,
+      500,
+    );
   }
 
   return {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
+import { errorResponse } from "@/lib/api-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,17 +102,6 @@ export async function POST(req: Request) {
       files: result,
     });
   } catch (error) {
-    console.error("BLOB UPLOAD ERROR:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Upload Blob gagal.",
-      },
-      { status: 500 }
-    );
+    return errorResponse("BLOB UPLOAD ERROR", error, "Upload Blob gagal.");
   }
 }

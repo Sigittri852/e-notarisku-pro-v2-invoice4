@@ -6,6 +6,8 @@ import { invoiceSubtotal, invoicePpn, invoiceTotal } from "@/lib/invoice";
 import { rupiah } from "@/lib/constants";
 import CurrencyInput from "@/components/CurrencyInput";
 import InvoiceDeleteButton from "@/components/InvoiceDeleteButton";
+import { fetchJson } from "@/lib/fetch-json";
+import { errorMessage } from "@/lib/errors";
 
 const DEFAULT_NOTARIS = "APRIANI, S.H., M.Kn.";
 
@@ -42,7 +44,7 @@ export default function InvoiceForm({ akta, invoice }: { akta?: Akta; invoice?: 
   const ppnNominal = useMemo(()=>invoicePpn({items, sspPph, sspdBphtb, ppnPersen, ppn: ppnLegacy}),[items, sspPph, sspdBphtb, ppnPersen, ppnLegacy]);
   const total = useMemo(()=>invoiceTotal({items, sspPph, sspdBphtb, diskon, ppn: ppnLegacy, ppnPersen}),[items, sspPph, sspdBphtb, diskon, ppnPersen, ppnLegacy]);
 
-  async function ensureNumber(){ if(nomor) return nomor; const r=await fetch('/api/invoices/next-number',{cache:'no-store'}); const text=await r.text(); let j:any; try{j=JSON.parse(text)}catch{throw new Error('API nomor invoice mengembalikan respons tidak valid: '+text.slice(0,200))} if(!r.ok || !j.nomor) throw new Error(j.error || 'Gagal mengambil nomor invoice'); setNomor(j.nomor); return j.nomor; }
+  async function ensureNumber(){ if(nomor) return nomor; const j=await fetchJson<{nomor?:string}>('/api/invoices/next-number',{cache:'no-store'}); if(!j?.nomor) throw new Error('Gagal mengambil nomor invoice'); setNomor(j.nomor); return j.nomor; }
   function updateItem(i:number, key:keyof InvoiceItem, value:string){setItems(v=>v.map((x,idx)=>idx===i?{...x,[key]:key==='description'?value:Number(value)}:x));}
   async function save(){
     setSaving(true);setError("");
@@ -55,10 +57,10 @@ export default function InvoiceForm({ akta, invoice }: { akta?: Akta; invoice?: 
         diskon,ppnPersen,ppn:ppnNominal,
         status,metodePembayaran,catatan
       };
-      const r=await fetch('/api/invoices'+(invoice?.id?`?id=${invoice.id}`:''),{method:invoice?.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const text=await r.text(); let j:any; try{j=JSON.parse(text)}catch{throw new Error('API invoice mengembalikan respons tidak valid: '+text.slice(0,300))} if(!r.ok) throw new Error(j.error||'Gagal menyimpan invoice');
+      const j=await fetchJson<{id?:string}>('/api/invoices'+(invoice?.id?`?id=${invoice.id}`:''),{method:invoice?.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      if(!j?.id) throw new Error('Server tidak mengembalikan ID invoice.');
       window.location.href=`/invoice/${j.id}`;
-    }catch(e:any){setError(e.message||'Gagal menyimpan invoice');setSaving(false)}
+    }catch(e){setError(errorMessage(e,'Gagal menyimpan invoice'));setSaving(false)}
   }
   return <div className="card invoice-builder">
     <div className="invoice-builder-head"><div><h2>Invoice / Tagihan</h2><p className="muted">Buat tagihan profesional berdasarkan akta dan honorarium.</p></div><span className="invoice-chip">{akta?.kategori||invoice?.kategori||'NOTARIS / PPAT'}</span></div>

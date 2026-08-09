@@ -2,9 +2,19 @@ import { NextResponse } from "next/server";
 import { getInvoice } from "@/lib/invoice-store";
 import { invoiceSubtotal, invoicePpn, invoiceTotal } from "@/lib/invoice";
 import { rupiah } from "@/lib/constants";
+import { errorResponse } from "@/lib/api-error";
 const esc=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
- const {id}=await params; const x=await getInvoice(id); if(!x)return new NextResponse('Invoice tidak ditemukan',{status:404});
+ try{
+  const {id}=await params;
+  return await buildDoc(id);
+ }catch(error){
+  return errorResponse('INVOICE WORD ERROR',error,'Gagal membuat dokumen Word invoice.');
+ }
+}
+
+async function buildDoc(id:string){
+ const x=await getInvoice(id); if(!x)return new NextResponse('Invoice tidak ditemukan',{status:404});
  let rows=x.items.map((it,i)=>`<tr><td>${i+1}</td><td>${esc(it.description)}</td><td>${it.qty}</td><td>${rupiah(it.price)}</td><td>${rupiah(it.qty*it.price)}</td></tr>`).join('');
  let nomorBaris=x.items.length;
  if((x.sspPph||0)>0){nomorBaris+=1;rows+=`<tr><td>${nomorBaris}</td><td>Pajak SSP (PPh)</td><td>1</td><td>${rupiah(x.sspPph||0)}</td><td>${rupiah(x.sspPph||0)}</td></tr>`;}

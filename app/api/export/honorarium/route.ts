@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { listAkta } from "@/lib/store";
+import { errorResponse } from "@/lib/api-error";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  try {
+    return await buildWorkbook();
+  } catch (error) {
+    return errorResponse("EXPORT HONORARIUM ERROR", error, "Gagal membuat rekap honorarium.");
+  }
+}
+
+async function buildWorkbook() {
   const data = await listAkta();
   const wb = new ExcelJS.Workbook();
   wb.creator = "e-NotarisKu Pro";

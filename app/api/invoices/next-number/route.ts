@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listInvoices } from "@/lib/invoice-store";
+import { errorResponse } from "@/lib/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +26,10 @@ export async function GET() {
       nomor: `${prefix}${String(next).padStart(4, "0")}`,
     });
   } catch (error) {
-    console.error("NEXT NUMBER ERROR:", error);
-
-    return NextResponse.json(
-      {
-        error: "Gagal membuat nomor invoice",
-        nomor: `INV-${new Date().getFullYear()}${String(
-          new Date().getMonth() + 1
-        ).padStart(2, "0")}-0001`,
-      },
-      { status: 500 }
+    return errorResponse(
+      "NEXT NUMBER ERROR",
+      error,
+      "Gagal membuat nomor invoice.",
     );
   }
 }
