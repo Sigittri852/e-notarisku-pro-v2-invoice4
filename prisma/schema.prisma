@@ -8,9 +8,9 @@ datasource db {
 }
 
 model Akta {
-  id              String    @id @default(cuid())
+  id              String   @id @default(cuid())
   nomorAkta       String
-  tanggal         DateTime
+  tanggal         String   @default("")
   kategori        String
   jenisAkta       String
   namaNotaris     String
@@ -20,22 +20,31 @@ model Akta {
   alamat          String?
   nomorSertifikat String?
   jenisHak        String?
-  luasTanah       Float?
-  nilaiTransaksi  Float     @default(0)
+  luasTanah       String?
+  nilaiTransaksi  Float    @default(0)
   nopPbb          String?
-  njop            Float     @default(0)
-  tanggalSsp      DateTime?
-  sspPph          Float     @default(0)
-  tanggalBphtb    DateTime?
-  bphtb           Float     @default(0)
-  honorarium      Float     @default(0)
-  status          String    @default("Draft")
+  njop            Float    @default(0)
+  tanggalSsp      String?
+  sspPph          Float    @default(0)
+  tanggalBphtb    String?
+  bphtb           Float    @default(0)
+  honorarium      Float    @default(0)
+  status          String   @default("Draft")
   catatan         String?
-  detailJson      String    @default("{}")
-  pihakJson       String    @default("[]")
-  dokumenJson     String    @default("[]")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  detailJson      String   @default("{}")
+  pihakJson       String   @default("[]")
+  dokumenJson     String   @default("[]")
+
+  // Berkas & tanda tangan digital yang sebelumnya hanya tersimpan di data/akta.json.
+  fotoTtdKlienJson        String @default("[]")
+  fotoTtdNotarisJson      String @default("[]")
+  minutaJson              String @default("[]")
+  tandaTanganDigitalJson  String @default("[]")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([createdAt])
 }
 
 model Invoice {

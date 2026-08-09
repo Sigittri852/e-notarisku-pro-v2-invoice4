@@ -1,18 +1,6 @@
-import { PrismaClient } from "@prisma/client";
 import type { Invoice, InvoiceItem } from "./invoice";
 import { AppError } from "./errors";
-
-const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClient;
-};
-
-const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+import { prisma } from "./prisma";
 
 function fromDb(row: any): Invoice {
   let items: InvoiceItem[] = [];
