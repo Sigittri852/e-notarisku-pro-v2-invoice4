@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
 import {
   createUser,
   listUsers,
@@ -9,11 +10,17 @@ import {
 const roles: UserRole[] = ["SUPER_ADMIN", "NOTARIS_PPAT", "STAFF"];
 
 export async function GET() {
+  const { session, response } = await requireRole("SUPER_ADMIN");
+  if (!session) return response;
+
   const users = await listUsers();
   return NextResponse.json(users.map(toPublicUser));
 }
 
 export async function POST(request: Request) {
+  const { session, response } = await requireRole("SUPER_ADMIN");
+  if (!session) return response;
+
   try {
     const body = await request.json();
     const nama = String(body.nama ?? "").trim();
@@ -31,9 +38,9 @@ export async function POST(request: Request) {
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       return NextResponse.json({ message: "Format email tidak valid." }, { status: 400 });
     }
-    if (password.length < 6) {
+    if (password.length < 8) {
       return NextResponse.json(
-        { message: "Password minimal 6 karakter." },
+        { message: "Password minimal 8 karakter." },
         { status: 400 },
       );
     }

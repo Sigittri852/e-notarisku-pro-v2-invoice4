@@ -1,9 +1,10 @@
 import { promises as fs } from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
+import type { UserRole } from "./session";
 
-export type UserRole = "SUPER_ADMIN" | "NOTARIS_PPAT" | "STAFF";
+export type { UserRole };
 
 export type StoredUser = {
   id: string;
@@ -20,35 +21,38 @@ export type PublicUser = Omit<StoredUser, "passwordHash">;
 
 const file = path.join(process.cwd(), "data", "users.json");
 
-const defaultUsers: StoredUser[] = [
-  {
-    id: "admin-default",
-    nama: "Administrator",
-    email: "admin@notaris.local",
-    role: "SUPER_ADMIN",
-    aktif: true,
-    passwordHash: bcrypt.hashSync("admin123", 10),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "staff-default",
-    nama: "Staf Kantor",
-    email: "staf@notaris.local",
-    role: "STAFF",
-    aktif: true,
-    passwordHash: bcrypt.hashSync("staff123", 10),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+function seedUsers(): StoredUser[] {
+  const email = (process.env.ADMIN_EMAIL ?? "admin@notaris.local").trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD ?? randomBytes(18).toString("base64url");
+  const now = new Date().toISOString();
+
+  if (!process.env.ADMIN_PASSWORD) {
+    console.warn(
+      `ADMIN_PASSWORD belum diatur. Akun awal "${email}" dibuat dengan password acak: ${password}\n` +
+        "Segera masuk dan ganti password, atau atur ADMIN_PASSWORD lalu hapus data/users.json.",
+    );
+  }
+
+  return [
+    {
+      id: randomUUID(),
+      nama: process.env.ADMIN_NAME ?? "Administrator",
+      email,
+      role: "SUPER_ADMIN",
+      aktif: true,
+      passwordHash: bcrypt.hashSync(password, 12),
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+}
 
 async function ensureFile() {
   try {
     await fs.access(file);
   } catch {
     await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, JSON.stringify(defaultUsers, null, 2), "utf8");
+    await fs.writeFile(file, JSON.stringify(seedUsers(), null, 2), "utf8");
   }
 }
 
@@ -93,7 +97,7 @@ export async function createUser(input: {
     email,
     role: input.role,
     aktif: input.aktif,
-    passwordHash: await bcrypt.hash(input.password, 10),
+    passwordHash: await bcrypt.hash(input.password, 12),
     createdAt: now,
     updatedAt: now,
   };
@@ -129,8 +133,25 @@ export async function updateUser(
     role: input.role,
     aktif: input.aktif,
     passwordHash: input.password
-      ? await bcrypt.hash(input.password, 10)
+      ? await bcrypt.hash(input.password, 12)
       : current.passwordHash,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveUsers(users);
+  return users[index];
+}
+
+export async function changePassword(id: string, currentPassword: string, newPassword: string) {
+  const users = await listUsers();
+  const index = users.findIndex((item) => item.id === id);
+  if (index < 0) throw new Error("Pengguna tidak ditemukan.");
+
+  const matches = await bcrypt.compare(currentPassword, users[index].passwordHash);
+  if (!matches) throw new Error("Password lama tidak sesuai.");
+
+  users[index] = {
+    ...users[index],
+    passwordHash: await bcrypt.hash(newPassword, 12),
     updatedAt: new Date().toISOString(),
   };
   await saveUsers(users);

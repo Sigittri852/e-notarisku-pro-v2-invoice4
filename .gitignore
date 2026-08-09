@@ -11,3 +11,5 @@ public/uploads/*
 
 prisma/*.db
 prisma/*.db-*
+
+data/users.json
